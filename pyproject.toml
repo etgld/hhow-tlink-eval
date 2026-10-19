@@ -1,5 +1,5 @@
 [project]
-name = "rt-ctae-eval"
+name = "hhow-tlink-eval"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
@@ -40,7 +40,7 @@ lint = [
 ]
 test = [
     "pytest>=8.3.3",
-    "rt-ctae-eval",
+    "hhow-tlink-eval",
     "pytest-dependency>=0.6.0",
 ]
 dev = [
@@ -50,4 +50,4 @@ dev = [
 ]
 [tool.setuptools.packages.find]
 where = ["src"]
-include = ["rt_ctae_eval*"]
+include = ["hhow_tlink_eval*"]

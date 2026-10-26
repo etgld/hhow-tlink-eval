@@ -13,13 +13,13 @@ from lseval.score import (
     build_relation_correctness_matrix,
 )
 
-from .rt_ctae import (
-    AdverseEventEntity,
+from .hhow_tlink import (
     AnnotatedCorpusScores,
     AnnotatedFileScores,
-    CausalRelation,
+    Event,
     EventType,
-    RTEntity,
+    TemporalRelation,
+    TimeExpression,
 )
 
 logger = logging.getLogger(__name__)
@@ -32,17 +32,17 @@ logging.basicConfig(
 
 
 def is_valid_relation(relation: Relation) -> bool:
-    first_adverse_second_rt = isinstance(
-        relation.arg1, AdverseEventEntity
-    ) and isinstance(relation.arg2, RTEntity)
-    first_rt_second_adverse = isinstance(relation.arg1, RTEntity) and isinstance(
-        relation.arg2, AdverseEventEntity
+    first_adverse_second_rt = isinstance(relation.arg1, Event) and isinstance(
+        relation.arg2, TimeExpression
+    )
+    first_rt_second_adverse = isinstance(relation.arg1, TimeExpression) and isinstance(
+        relation.arg2, Event
     )
     return first_adverse_second_rt or first_rt_second_adverse
 
 
-def to_rt_entity(entity: Entity, file_id: int) -> RTEntity:
-    return RTEntity(
+def to_time_expression(entity: Entity, file_id: int) -> TimeExpression:
+    return TimeExpression(
         file_id=file_id,
         label_studio_id=entity.label_studio_id,
         span=entity.span,
@@ -54,8 +54,8 @@ def to_rt_entity(entity: Entity, file_id: int) -> RTEntity:
     )
 
 
-def to_adverse_event_entity(entity: Entity, file_id: int) -> AdverseEventEntity:
-    return AdverseEventEntity(
+def to_event(entity: Entity, file_id: int) -> Event:
+    return Event(
         file_id=file_id,
         label_studio_id=entity.label_studio_id,
         span=entity.span,
@@ -112,13 +112,13 @@ def parse_entities(
         label = getattr(entity, "label")
         event_type = EventType(label)
         match event_type:
-            case EventType.RTEntity:
-                event_type_to_instances[EventType.RTEntity].add(
-                    to_rt_entity(entity, annotated_file.file_id)
+            case EventType.Event:
+                event_type_to_instances[EventType.Event].add(
+                    to_time_expression(entity, annotated_file.file_id)
                 )
-            case EventType.AdverseEventEntity:
-                event_type_to_instances[EventType.AdverseEventEntity].add(
-                    to_adverse_event_entity(entity, annotated_file.file_id)
+            case EventType.TimeExpression:
+                event_type_to_instances[EventType.TimeExpression].add(
+                    to_event(entity, annotated_file.file_id)
                 )
             case _:
                 raise ValueError(
@@ -170,7 +170,7 @@ def recoordinate_false_negative_relations(
                 # Everything is all set
                 yield relation
             case Correctness.FALSE_NEGATIVE, Correctness.NA:
-                yield CausalRelation(
+                yield TemporalRelation(
                     file_id=relation.file_id,
                     arg1=relation.arg1,
                     arg2=recoordinate_relation_argument(
@@ -180,7 +180,7 @@ def recoordinate_false_negative_relations(
                     source_annotations=relation.source_annotations,
                 )
             case Correctness.NA, Correctness.FALSE_NEGATIVE:
-                yield CausalRelation(
+                yield TemporalRelation(
                     file_id=relation.file_id,
                     arg1=recoordinate_relation_argument(
                         relation.arg1, arg1_correctness_matrix, overlap
@@ -190,7 +190,7 @@ def recoordinate_false_negative_relations(
                     source_annotations=relation.source_annotations,
                 )
             case Correctness.NA, Correctness.NA:
-                yield CausalRelation(
+                yield TemporalRelation(
                     file_id=relation.file_id,
                     arg1=recoordinate_relation_argument(
                         relation.arg1, arg1_correctness_matrix, overlap
@@ -207,10 +207,10 @@ def recoordinate_false_negative_relations(
                 )
 
 
-def recoordinate_causal_relation(
+def recoordinate_temporal_relation(
     label_studio_id_to_entity: Mapping[str, Entity],
     relation: Relation,
-) -> CausalRelation | None:
+) -> TemporalRelation | None:
     updated_arg1 = label_studio_id_to_entity.get(relation.arg1.label_studio_id)
     updated_arg2 = label_studio_id_to_entity.get(relation.arg2.label_studio_id)
     if updated_arg1 is None or updated_arg2 is None:
@@ -218,7 +218,7 @@ def recoordinate_causal_relation(
             f"Missing ID mapping information in {label_studio_id_to_entity.keys()} for one of {relation.arg1.label_studio_id} {relation.arg2.label_studio_id}"
         )
         return None
-    updated_relation = CausalRelation(
+    updated_relation = TemporalRelation(
         file_id=relation.file_id,
         arg1=updated_arg1,
         arg2=updated_arg2,
@@ -230,7 +230,7 @@ def recoordinate_causal_relation(
     return updated_relation
 
 
-def recoordinate_causal_relations(
+def recoordinate_temporal_relations(
     annotated_file: AnnotatedFile, updated_entities: Iterable[Entity]
 ) -> Set[Relation]:
     id_to_entity = {}
@@ -244,7 +244,7 @@ def recoordinate_causal_relations(
                 f"Duplicate Label Studio IDs for entities {entity} and {stored}"
             )
         id_to_entity[str(label_studio_id)] = entity
-    local_recoordinate = partial(recoordinate_causal_relation, id_to_entity)
+    local_recoordinate = partial(recoordinate_temporal_relation, id_to_entity)
     return set(
         filter(operator.is_not_none, map(local_recoordinate, annotated_file.relations))
     )
@@ -263,22 +263,20 @@ def score_file(
 
     event_type_to_prediction_entities = parse_entities(prediction_file)
     event_type_to_reference_entities = parse_entities(reference_file)
-    rt_entity_correctness_matrix = build_entity_correctness_matrix(
+    time_expression_correctness_matrix = build_entity_correctness_matrix(
         predicted_entities=event_type_to_prediction_entities.get(
-            EventType.RTEntity, set()
+            EventType.TimeExpression, set()
         ),
         reference_entities=event_type_to_reference_entities.get(
-            EventType.RTEntity, set()
+            EventType.TimeExpression, set()
         ),
         overlap=overlap,
     )
-    adverse_event_entity_correctness_matrix = build_entity_correctness_matrix(
+    event_correctness_matrix = build_entity_correctness_matrix(
         predicted_entities=event_type_to_prediction_entities.get(
-            EventType.AdverseEventEntity, set()
+            EventType.Event, set()
         ),
-        reference_entities=event_type_to_reference_entities.get(
-            EventType.AdverseEventEntity, set()
-        ),
+        reference_entities=event_type_to_reference_entities.get(EventType.Event, set()),
         overlap=overlap,
     )
     entity_to_correctness_matrix = {}
@@ -287,34 +285,34 @@ def score_file(
         event_type_to_reference_entities.items(),
     ):
         match event_type:
-            case EventType.RTEntity:
-                for entity in entities:
-                    entity_to_correctness_matrix[entity] = rt_entity_correctness_matrix
-            case EventType.AdverseEventEntity:
+            case EventType.TimeExpression:
                 for entity in entities:
                     entity_to_correctness_matrix[entity] = (
-                        adverse_event_entity_correctness_matrix
+                        time_expression_correctness_matrix
                     )
+            case EventType.Event:
+                for entity in entities:
+                    entity_to_correctness_matrix[entity] = event_correctness_matrix
     raw_relation_correctness_matrix = build_relation_correctness_matrix(
-        predicted_relations=recoordinate_causal_relations(
+        predicted_relations=recoordinate_temporal_relations(
             prediction_file,
             chain.from_iterable(event_type_to_prediction_entities.values()),
         ),
-        reference_relations=recoordinate_causal_relations(
+        reference_relations=recoordinate_temporal_relations(
             reference_file,
             chain.from_iterable(event_type_to_reference_entities.values()),
         ),
         overlap=overlap,
     )
-    causal_relation_correctness_matrix = CorrectnessMatrix(
+    temporal_relation_correctness_matrix = CorrectnessMatrix(
         true_positives=cast(
-            set[CausalRelation], raw_relation_correctness_matrix.true_positives
+            set[TemporalRelation], raw_relation_correctness_matrix.true_positives
         ),
         false_positives=cast(
-            set[CausalRelation], raw_relation_correctness_matrix.false_positives
+            set[TemporalRelation], raw_relation_correctness_matrix.false_positives
         ),
         false_negatives=cast(
-            set[CausalRelation],
+            set[TemporalRelation],
             set(
                 recoordinate_false_negative_relations(
                     false_negative_relations=raw_relation_correctness_matrix.false_negatives,
@@ -326,9 +324,9 @@ def score_file(
     )
     return AnnotatedFileScores(
         file_id=file_id,
-        rt_entity_correctness_matrix=rt_entity_correctness_matrix,
-        adverse_event_entity_correctness_matrix=adverse_event_entity_correctness_matrix,
-        causal_relation_correctness_matrix=causal_relation_correctness_matrix,
+        time_expression_correctness_matrix=time_expression_correctness_matrix,
+        event_correctness_matrix=event_correctness_matrix,
+        temporal_relation_correctness_matrix=temporal_relation_correctness_matrix,
         dtr_correctness_matrices=build_category_correctness_matrices(
             predicted_category_entities=parse_dtr_entities(prediction_file),
             reference_category_entities=parse_dtr_entities(reference_file),
@@ -428,17 +426,17 @@ def merge_corpus_scores(
     corpus_scores: AnnotatedCorpusScores, file_scores: AnnotatedFileScores
 ) -> AnnotatedCorpusScores:
     return AnnotatedCorpusScores(
-        rt_entity_correctness_matrix=merge_correctness_matrix(
-            corpus_scores.rt_entity_correctness_matrix,
-            file_scores.rt_entity_correctness_matrix,
+        time_expression_correctness_matrix=merge_correctness_matrix(
+            corpus_scores.time_expression_correctness_matrix,
+            file_scores.time_expression_correctness_matrix,
         ),
-        adverse_event_entity_correctness_matrix=merge_correctness_matrix(
-            corpus_scores.adverse_event_entity_correctness_matrix,
-            file_scores.adverse_event_entity_correctness_matrix,
+        event_correctness_matrix=merge_correctness_matrix(
+            corpus_scores.event_correctness_matrix,
+            file_scores.event_correctness_matrix,
         ),
-        causal_relation_correctness_matrix=merge_correctness_matrix(
-            corpus_scores.causal_relation_correctness_matrix,
-            file_scores.causal_relation_correctness_matrix,
+        temporal_relation_correctness_matrix=merge_correctness_matrix(
+            corpus_scores.temporal_relation_correctness_matrix,
+            file_scores.temporal_relation_correctness_matrix,
         ),
         dtr_correctness_matrices=update_category_correctness_matrices(
             corpus_scores.dtr_correctness_matrices,

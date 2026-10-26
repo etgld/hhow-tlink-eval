@@ -20,7 +20,7 @@ from lseval.utils import organize_corpus_annotations_by_annotator
 from tabulate import tabulate
 
 from .annotator import get_id_to_annotator_mappping
-from .rt_ctae import AnnotatedCorpusScores, AnnotatedFileScores
+from .hhow_tlink import AnnotatedCorpusScores, AnnotatedFileScores
 from .utils import (
     merge_corpus_scores,
     merge_correctness_matrix,
@@ -123,9 +123,9 @@ def score_corpus(
         return len(exclusion_ids) == 0 or file_id not in exclusion_ids
 
     annotated_corpus_scores = AnnotatedCorpusScores(
-        rt_entity_correctness_matrix=CorrectnessMatrix(),
-        adverse_event_entity_correctness_matrix=CorrectnessMatrix(),
-        causal_relation_correctness_matrix=CorrectnessMatrix(),
+        time_expression_correctness_matrix=CorrectnessMatrix(),
+        event_correctness_matrix=CorrectnessMatrix(),
+        temporal_relation_correctness_matrix=CorrectnessMatrix(),
     )
     file_id_to_prediction_files = {
         annotated_file.file_id: annotated_file
@@ -182,15 +182,15 @@ def score_corpus(
         entity_correctness_matrices = cast(
             Iterable[CorrectnessMatrix[Entity]],
             [
-                annotated_file_scores.rt_entity_correctness_matrix,
-                annotated_file_scores.adverse_event_entity_correctness_matrix,
+                annotated_file_scores.time_expression_correctness_matrix,
+                annotated_file_scores.event_correctness_matrix,
                 *annotated_file_scores.dtr_correctness_matrices.values(),
             ],
         )
 
         relation_correctness_matrices = cast(
             Iterable[CorrectnessMatrix[Relation]],
-            [annotated_file_scores.causal_relation_correctness_matrix],
+            [annotated_file_scores.temporal_relation_correctness_matrix],
         )
         adjudication_file = build_adjudication_file(
             file_id=file_id,
@@ -297,17 +297,17 @@ def print_metrics(
     )
     rt_row = [
         "Radiotherapy Treatments",
-        f"{annotated_collection_scores.rt_entity_correctness_matrix.get_f1():.3f}",
-        f"{annotated_collection_scores.rt_entity_correctness_matrix.get_precision():.3f}",
-        f"{annotated_collection_scores.rt_entity_correctness_matrix.get_recall():.3f}",
-        f"{annotated_collection_scores.rt_entity_correctness_matrix.get_support()}",
+        f"{annotated_collection_scores.time_expression_correctness_matrix.get_f1():.3f}",
+        f"{annotated_collection_scores.time_expression_correctness_matrix.get_precision():.3f}",
+        f"{annotated_collection_scores.time_expression_correctness_matrix.get_recall():.3f}",
+        f"{annotated_collection_scores.time_expression_correctness_matrix.get_support()}",
     ]
     adverse_event_row = [
         "Adverse Events",
-        f"{annotated_collection_scores.adverse_event_entity_correctness_matrix.get_f1():.3f}",
-        f"{annotated_collection_scores.adverse_event_entity_correctness_matrix.get_precision():.3f}",
-        f"{annotated_collection_scores.adverse_event_entity_correctness_matrix.get_recall():.3f}",
-        f"{annotated_collection_scores.adverse_event_entity_correctness_matrix.get_support()}",
+        f"{annotated_collection_scores.event_correctness_matrix.get_f1():.3f}",
+        f"{annotated_collection_scores.event_correctness_matrix.get_precision():.3f}",
+        f"{annotated_collection_scores.event_correctness_matrix.get_recall():.3f}",
+        f"{annotated_collection_scores.event_correctness_matrix.get_support()}",
     ]
     dtr_row = [
         "DocTimeRel",
@@ -324,19 +324,19 @@ def print_metrics(
         f"{cui_recall:.3f}",
         f"{cui_support}",
     ]
-    causal_relation_row = [
-        "Causal Relations",
-        f"{annotated_collection_scores.causal_relation_correctness_matrix.get_f1():.3f}",
-        f"{annotated_collection_scores.causal_relation_correctness_matrix.get_precision():.3f}",
-        f"{annotated_collection_scores.causal_relation_correctness_matrix.get_recall():.3f}",
-        f"{annotated_collection_scores.causal_relation_correctness_matrix.get_support()}",
+    temporal_relation_row = [
+        "Temporal Relations",
+        f"{annotated_collection_scores.temporal_relation_correctness_matrix.get_f1():.3f}",
+        f"{annotated_collection_scores.temporal_relation_correctness_matrix.get_precision():.3f}",
+        f"{annotated_collection_scores.temporal_relation_correctness_matrix.get_recall():.3f}",
+        f"{annotated_collection_scores.temporal_relation_correctness_matrix.get_support()}",
     ]
     rows = [
         rt_row,
         adverse_event_row,
         dtr_row,
         cui_row,
-        causal_relation_row,
+        temporal_relation_row,
     ]
     print(
         tabulate(rows, headers=["Annotation", "F1", "Precision", "Recall", "Support"])

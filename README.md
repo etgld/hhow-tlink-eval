@@ -1,6 +1,6 @@
-# rt-ctae-eval
+# hhow-tlink-eval
 
- Evaluation and annotation adjudication tool for the ACS-CTAE Label Studio project, using [lseval](https://github.com/HealthNLPorg/lseval) as a backend.
+ Evaluation and annotation adjudication tool for the HHoW Timelines Label Studio project, using [lseval](https://github.com/HealthNLPorg/lseval) as a backend.
 
 ## Installation
 
